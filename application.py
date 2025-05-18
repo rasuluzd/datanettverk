@@ -1,5 +1,3 @@
-#!/usr/bin/env python3
-
 import argparse  # For parsing command-line arguments
 import socket    # For network communication using UDP sockets
 import struct    # For packing and unpacking binary data (DRTP header)
