@@ -95,14 +95,11 @@ class DRTPPacket:
             raises struct.error if unpacking fails
         """
         if len(raw_packet_bytes) < HEADER_LENGTH:
-            # print("DEBUG: Received packet too short for header.") # Student debug comment
             return None 
         try:
-            # TODO: consider what happens if unpack returns None here, though it should be caught by `not pkt` check later
             header_tuple = struct.unpack(DRTPPacket._header_format_string,
                                          raw_packet_bytes[:HEADER_LENGTH])
         except struct.error:
-            # print("DEBUG: Struct unpack failed for header.") # Another student debug comment
             return None 
         
         data_payload_part = raw_packet_bytes[HEADER_LENGTH:]
@@ -128,7 +125,7 @@ class DRTPServer:
         """
         self.host_ip = ip_addr
         self.port = port_num
-        self.discard_seq = discard_packet_seq # For testing GBN as per README
+        self.discard_seq = discard_packet_seq 
         self.discard_seq_triggered = False
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         self.expected_seq_num = 1
@@ -153,7 +150,7 @@ class DRTPServer:
         """
         try:
             self.sock.bind((self.host_ip, self.port))
-            print(f"Server listening on {self.host_ip}:{self.port}") # As per README, this line has no timestamp
+            print(f"Server listening on {self.host_ip}:{self.port}") 
             if not self._establish_connection_server():
                 return
             self._receive_file_data()
@@ -162,7 +159,6 @@ class DRTPServer:
         except Exception as e_general:
             print(f"Server General Err: {e_general}")
         finally:
-            # Inlined _calculate_and_log_throughput
             if self.start_time_transfer > 0: # Check if transfer even started
                 if self.connection_active and self.end_time_transfer == 0: # If connection was active but FIN not received (e.g. client crash)
                     self.end_time_transfer = time.time()
@@ -171,19 +167,17 @@ class DRTPServer:
                     duration = self.end_time_transfer - self.start_time_transfer
                     if duration > 0: # Avoid division by zero if times are too close or identical
                         throughput_mbps = (self.total_bytes_received_with_header * 8) / (duration * 1000000.0) # 1MB = 1000KB = 1,000,000 Bytes
-                        print(f"The throughput is {throughput_mbps:.2f} Mbps") # No timestamp in README example
-                    # else:
-                        # print("Throughput: Duration too short for calculation.") # Optional student comment
+                        print(f"The throughput is {throughput_mbps:.2f} Mbps")
                 elif self.total_bytes_received_with_header == 0 and self.connection_active : # Connection established but no data
                      print("Throughput: No data received for calculation.")
                 # else:
                     # print("Throughput: Not enough data or valid duration.") # Optional
 
-                print("Connection Closes") # No timestamp in README example
+                print("Connection Closes")
             
             if self.sock:
                 self.sock.close()
-            print("Server shut down.") # No timestamp in README example
+            print("Server shut down.")
 
     def _establish_connection_server(self):
         """
@@ -198,19 +192,18 @@ class DRTPServer:
         """
         try:
             self.sock.settimeout(None) # Wait indefinitely for the first SYN
-            # print("Server: Waiting for SYN...") # This log is not in the example output
             raw_syn, client_address_info = self.sock.recvfrom(PACKET_SIZE)
             syn_pkt = DRTPPacket.unpack(raw_syn)
             if not syn_pkt or not (syn_pkt.flags & FLAG_SYN):
-                # print("Server: Did not receive a valid SYN packet.") # Student debug
+                print("Did not receive a valid SYN packet.")
                 return False 
             self.client_addr = client_address_info
-            print("SYN packet is received") # No timestamp in README example
+            print("SYN packet is received")
 
             syn_ack_pkt = DRTPPacket(flags=FLAG_SYN | FLAG_ACK,
                                      recv_window=RECEIVER_WINDOW_ON_SYN_ACK) # Server advertises its window
             self.sock.sendto(syn_ack_pkt.pack(), self.client_addr)
-            print("SYN-ACK packet is sent") # No timestamp in README example
+            print("SYN-ACK packet is sent")
 
             # Make sure this timeout is reasonable for handshake
             self.sock.settimeout(CONNECTION_SETUP_TIMEOUT) 
@@ -218,10 +211,10 @@ class DRTPServer:
             ack_pkt = DRTPPacket.unpack(raw_ack)
             # ACK should have only ACK flag, not SYN
             if not ack_pkt or not ((ack_pkt.flags & FLAG_ACK) and not (ack_pkt.flags & FLAG_SYN)):
-                # print("Server: Did not receive a valid ACK for SYN-ACK.") # Student debug
+                print("Did not receive a valid ACK for SYN-ACK.") 
                 return False
-            print("ACK packet is received") # No timestamp in README example
-            print("Connection established") # No timestamp in README example
+            print("ACK packet is received")
+            print("Connection established")
             self.connection_active = True
             self.start_time_transfer = time.time() # Start timing for throughput calculation
             return True
@@ -252,38 +245,36 @@ class DRTPServer:
                         raw_data, sender_addr = self.sock.recvfrom(PACKET_SIZE)
                         
                         if sender_addr != self.client_addr: 
-                            # print(f"Server: Received packet from unexpected address {sender_addr}") # Student debug
                             continue
                         
                         pkt = DRTPPacket.unpack(raw_data)
                         if not pkt: 
-                            # print("Server: Failed to unpack received packet.") # Student debug
+                            print("Failed to unpack received packet.") 
                             continue
 
                         if pkt.flags & FLAG_FIN:
                             self.end_time_transfer = time.time() # Mark end time for throughput
-                            print("FIN packet is received") # No timestamp in README example
+                            print("FIN packet is received")
                             
                             # Inlined _send_fin_ack_server
                             fin_ack_resp = DRTPPacket(ack_num=pkt.seq_num, flags=FLAG_FIN | FLAG_ACK)
                             try:
                                 self.sock.sendto(fin_ack_resp.pack(), self.client_addr)
-                                print("FIN ACK packet is sent") # No timestamp in README example
+                                print("FIN ACK packet is sent")
                             except socket.error as e_fin_ack: 
                                 print(f"Server: Error sending FIN-ACK: {e_fin_ack}")
                             
                             self.connection_active = False # End of connection
                             break # Exit receiving loop
 
-                        # Simulating packet discard for testing GBN as per README -d flag
                         if self.discard_seq is not None and pkt.seq_num == self.discard_seq and \
                            not self.discard_seq_triggered:
-                            print(f"Simulating discard of packet seq={pkt.seq_num}") # This log is not in example, but for -d feature
+                            print(f"Simulating discard of packet seq={pkt.seq_num}") 
                             self.discard_seq_triggered = True # Only discard once
                             continue # Skip processing this packet
 
                         if pkt.seq_num == self.expected_seq_num:
-                            log_message_ts(f"packet {pkt.seq_num} is received") # Timestamped as per README
+                            log_message_ts(f"packet {pkt.seq_num} is received")
                             file_out.write(pkt.data)
                             self.total_bytes_received_payload += len(pkt.data)
                             self.total_bytes_received_with_header += len(raw_data)
@@ -294,19 +285,15 @@ class DRTPServer:
                             log_message_ts(f"sending ack for the received {pkt.seq_num}") # Timestamped
                             self.expected_seq_num += 1
                         elif pkt.seq_num < self.expected_seq_num: # Duplicate of an already ACKed packet
-                            # Resend ACK for the highest in-order packet (or this specific old one)
-                            # print(f"Server: Received duplicate packet {pkt.seq_num}, expected {self.expected_seq_num}.") # Student debug
                             ack_resp = DRTPPacket(ack_num=pkt.seq_num, flags=FLAG_ACK) 
                             self.sock.sendto(ack_resp.pack(), self.client_addr)
-                            # log_message_ts(f"sending ack for the received {pkt.seq_num}") # Example doesn't show this re-ACK explicitly
                         else: # Out-of-order packet (pkt.seq_num > self.expected_seq_num)
                             # GBN receiver discards out-of-order packets.
                             # It ACKs the last correctly received in-order packet.
-                            # print(f"Server: out-of-order packet {pkt.seq_num} (expected {self.expected_seq_num}). Discarding.") # Student debug
+                            print(f"Server: out-of-order packet {pkt.seq_num} (expected {self.expected_seq_num}). Discarding.")
                             if self.expected_seq_num > 1: # If we have received at least one packet
                                 ack_resp = DRTPPacket(ack_num=self.expected_seq_num -1 , flags=FLAG_ACK)
                                 self.sock.sendto(ack_resp.pack(), self.client_addr)
-                                # log_message_ts(f"sending ack for the received {self.expected_seq_num - 1}") # Re-ACK last in-order
                     
                     except socket.timeout:
                         print("Server: Timeout waiting for data/FIN.")
@@ -371,12 +358,12 @@ class DRTPClient:
                 print(f"Client: File '{self.filename}' not found. Exiting.")
                 return
             
-            print("Connection Establishment Phase:") # No timestamp in README example
+            print("Connection Establishment Phase:")
             if not self._establish_connection_client():
                 return # Error message handled in _establish_connection_client
             self.connection_established = True
             
-            print("Data Transfer:") # No timestamp in README example
+            print("Data Transfer:") 
             self.file_handle = open(self.filename, 'rb')
             if os.path.getsize(self.filename) == 0: 
                 print(f"Client: File '{self.filename}' is empty.")
@@ -386,7 +373,7 @@ class DRTPClient:
             
             # Check if all data sent and acknowledged
             if self.eof_reached and self.base_seq_num == self.next_seq_num: 
-                print("DATA Finished") # No timestamp in README example
+                print("DATA Finished") 
         
         except FileNotFoundError: 
              print(f"Client: File '{self.filename}' could not be opened. Exiting.")
@@ -400,11 +387,10 @@ class DRTPClient:
             if self.file_handle: 
                 self.file_handle.close()
             if self.connection_established: 
-                print("Connection Teardown:") # No timestamp in README example
+                print("Connection Teardown:")
                 self._teardown_connection_client()
             if self.sock: 
                 self.sock.close()
-            # print("Client shutdown.") # This log is not in the example output
 
     def _establish_connection_client(self):
         """
@@ -419,7 +405,7 @@ class DRTPClient:
         try:
             syn_pkt = DRTPPacket(flags=FLAG_SYN)
             self.sock.sendto(syn_pkt.pack(), self.server_addr)
-            print("SYN packet is sent") # No timestamp in README example
+            print("SYN packet is sent")
 
             self.sock.settimeout(CONNECTION_SETUP_TIMEOUT)
             raw_syn_ack, _ = self.sock.recvfrom(PACKET_SIZE)
@@ -430,18 +416,16 @@ class DRTPClient:
                 return False
             
             server_rcv_win = syn_ack_pkt.recv_window
-            # print(f"Debug: Client window {self.window_size_arg}, Server advertised {server_rcv_win}") # Student debug comment
             self.effective_window_size = min(self.window_size_arg, server_rcv_win)
             if self.effective_window_size <= 0: 
-                self.effective_window_size = 1 # Ensure window is at least 1, as per student interpretation
+                self.effective_window_size = 1
             
-            print("SYN-ACK packet is received") # No timestamp in README example
-            # print(f"Effective window size set to: {self.effective_window_size}") # Student debug
+            print("SYN-ACK packet is received")
 
             ack_pkt = DRTPPacket(flags=FLAG_ACK) 
             self.sock.sendto(ack_pkt.pack(), self.server_addr)
-            print("ACK packet is sent") # No timestamp in README example
-            print("Connection established") # No timestamp in README example
+            print("ACK packet is sent")
+            print("Connection established")
             return True
         except socket.timeout:
             print("Connection failed: Timeout waiting for SYN-ACK.") 
@@ -483,7 +467,6 @@ class DRTPClient:
                     print(f"Client: Socket error sending packet {self.next_seq_num}: {e}")
                     return # Critical error, stop GBN
 
-                # Formatting the sliding window log as per README example
                 window_log_display_list = sorted([s for s in self.sent_packets_buffer if s >= self.base_seq_num])
                 window_log_str = ", ".join(map(str, window_log_display_list))
                 log_message_ts(f"packet with seq = {self.next_seq_num} is sent, sliding window = {{{window_log_str}}}")
@@ -524,12 +507,10 @@ class DRTPClient:
                             self.gbn_timer_start_time = None # Stop timer
                         else: # Still outstanding packets
                             self.gbn_timer_start_time = time.time() # Restart timer for new base
-                # else:
-                    # print(f"Client: Received non-ACK or invalid packet while expecting ACK.") # Student debug
 
             except socket.timeout:
                 if self.base_seq_num < self.next_seq_num: # If there are unacknowledged packets
-                    print("RTO occured") # This log is not in example, but common for GBN understanding
+                    print("RTO occured")
                     self.gbn_timer_start_time = time.time() # Restart timer
                     # Retransmit all packets in the current window
                     for seq_to_resend in range(self.base_seq_num, self.next_seq_num):
@@ -537,8 +518,6 @@ class DRTPClient:
                             bytes_to_resend_pkt = self.sent_packets_buffer[seq_to_resend]
                             try:
                                 self.sock.sendto(bytes_to_resend_pkt, self.server_addr)
-                                # The example output for client does not show retransmission logs explicitly
-                                # print(f"Client: retransmitting packet with seq = {seq_to_resend}") # Student debug
                             except socket.error as e:
                                 print(f"Client: Socket error retransmitting packet {seq_to_resend}: {e}")
                                 return # Critical error
@@ -556,12 +535,8 @@ class DRTPClient:
             self.last_fin_seq_num = self.next_seq_num # FIN uses the next seq num
             fin_pkt_obj = DRTPPacket(seq_num=self.last_fin_seq_num, flags=FLAG_FIN)
             
-            # README implies a simple 2-way, not multiple retries for FIN
-            # So, send once and wait.
             self.sock.sendto(fin_pkt_obj.pack(), self.server_addr)
-            # Typo in README example "FIN packet packet is sent", matching "FIN packet is sent"
-            print("FIN packet is sent") # No timestamp in README example 
-            
+            print("FIN packet is sent")
             self.sock.settimeout(CONNECTION_SETUP_TIMEOUT) 
             raw_fin_ack, _ = self.sock.recvfrom(PACKET_SIZE) 
             fin_ack_pkt_obj = DRTPPacket.unpack(raw_fin_ack)
@@ -570,11 +545,11 @@ class DRTPClient:
                (fin_ack_pkt_obj.flags & FLAG_FIN) and \
                (fin_ack_pkt_obj.flags & FLAG_ACK) and \
                (fin_ack_pkt_obj.ack_num == self.last_fin_seq_num):
-                print("FIN ACK packet is received") # No timestamp in README example
-                print("Connection Closes") # No timestamp in README example
+                print("FIN ACK packet is received")
+                print("Connection Closes")
                 return True
             else:
-                print("Connection Closes (FIN-ACK not received or invalid)") # Modified log
+                print("Connection Closes (FIN-ACK not received or invalid)") 
                 return False
         except socket.timeout:
             print("Connection Closes (Timeout waiting for FIN-ACK)")
@@ -600,7 +575,7 @@ def check_port_arg_main(port_value_str):
     """
     try:
         port = int(port_value_str)
-        if not (1024 <= port <= 65535): # Range as per README
+        if not (1024 <= port <= 65535):
             raise argparse.ArgumentTypeError(f"Port {port} out of range [1024-65535].")
         return port
     except ValueError: # If int() conversion fails
@@ -628,7 +603,7 @@ def main():
     
     arg_parser.add_argument("-f", "--file", type=str, metavar="FILENAME", help="File to send (Client only). E.g., Photo.jpg")
     arg_parser.add_argument("-w", "--window", type=int, default=DEFAULT_WINDOW_SIZE, metavar="SIZE", help=f"Client's sending window size. Default: {DEFAULT_WINDOW_SIZE}.")
-    arg_parser.add_argument("-d", "--discard", type=int, metavar="SEQ_NUM", help="Server: seq to discard once for testing.") # As per README
+    arg_parser.add_argument("-d", "--discard", type=int, metavar="SEQ_NUM", help="Server: seq to discard once for testing.") 
 
     try:
         cli_args = arg_parser.parse_args()
@@ -636,11 +611,9 @@ def main():
         # argparse handles printing errors and exiting, so just return
         return 
 
-    # Argument validation and default setting as per README
     if cli_args.client:
         if cli_args.ip is None: 
             cli_args.ip = "127.0.0.1" # Default server IP for client
-            # print(f"Client: No server IP provided, defaulting to {cli_args.ip}.") # Optional log
         if not cli_args.file: 
             arg_parser.error("-f/--file is required for client mode.") 
         if cli_args.window <= 0: 
@@ -649,10 +622,8 @@ def main():
     if cli_args.server:
         if cli_args.ip is None: 
             cli_args.ip = "0.0.0.0" # Default for server to listen on all interfaces
-            # print(f"Server: No IP provided, defaulting to listen on {cli_args.ip}.") # Optional log
     
     if cli_args.server:
-        # Pass discard_seq to server constructor
         drtp_server = DRTPServer(cli_args.ip, cli_args.port, cli_args.discard) 
         drtp_server.start()
     elif cli_args.client:
